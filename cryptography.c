@@ -56,6 +56,13 @@ int main(int argc, char* argv[]) {
     /* f */  0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
     };
 
+    int shift_matrice[4][4] = {
+        {0, 1, 2, 3},
+        {1, 2, 3, 0},
+        {2, 3, 0, 1},
+        {3, 0, 1, 2}
+    };
+
     if(fptr != NULL){
 
         //Reads file into a buffer
@@ -67,7 +74,6 @@ int main(int argc, char* argv[]) {
 
         fread(buffer, sizeof(uint8_t), sz, fptr);
 
-
         //Separar em 2d arrays de 16bytes each
         const int bytebsize = 16;
 
@@ -77,29 +83,51 @@ int main(int argc, char* argv[]) {
         //Cria matrizes
         //Primeiro lidamos com todos os blocos inteiros
         uint8_t** matriz = malloc(4 * sizeof(uint8_t*));
-        int grid_size = 4;
+        uint8_t** temp = malloc(4 * sizeof(uint8_t*)); //Temporario, achar outro jeito depois sem temp.
+
+        const int grid_size = 4;
 
         for(int i = 0; i < grid_size; i++){
             matriz[i] = malloc(grid_size * sizeof(uint8_t));
+            temp[i] = malloc(grid_size * sizeof(uint8_t)); //Temporario, achar outro jeito depois sem temp.
         }
 
         //Cria matriz
         for(int y = 0; y < grid_size; y++){
             for(int z = 0; z < grid_size; z++){
                 matriz[z][y] = *buffer;
+                temp[z][y] = *buffer; //Temporario, achar outro jeito depois sem temp.
                 buffer++;
             }
         }
+
+        printf("Creating Matrix: \n");
+        debugMatriz(matriz);
+        printf("\n");
 
         //S-Box nos bytes da matriz
         for(int y = 0; y < grid_size; y++){
             for(int z = 0; z < grid_size; z++){
                 matriz[z][y] = sbox_encrypt[matriz[z][y]];
+                temp[z][y] = sbox_encrypt[temp[z][y]]; //Temporario, achar outro jeito depois sem temp.
             }
         }
 
+        printf("After S-Box: \n");
         debugMatriz(matriz);
+        printf("\n");
         
+        for(int y = 0; y < grid_size; y++){
+            for(int z = 0; z < grid_size; z++){
+                matriz[y][z] = temp[y][shift_matrice[y][z]];
+            }
+        }
+        
+        
+        printf("After Shifting: \n");
+        debugMatriz(matriz);
+        printf("\n");
+
         //Libera memória.
         free(buffer);
         freeMatriz(matriz);
