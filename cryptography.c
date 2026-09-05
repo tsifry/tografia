@@ -5,6 +5,8 @@
 int debugMatriz(uint8_t** mat, char* msg);
 void freeMatriz(uint8_t** mat);
 
+uint8_t xmul(uint8_t A, uint8_t B);
+
 int main(int argc, char* argv[]) {
     
     for(int i = 0; i < argc; i++){
@@ -98,17 +100,13 @@ int main(int argc, char* argv[]) {
             }
         }
 
-        debugMatriz(matriz, "Creating Matrix: \n");
-
         //S-Box nos bytes da matriz
         for(int y = 0; y < grid_size; y++){
             for(int z = 0; z < grid_size; z++){
                 matriz[z][y] = sbox_encrypt[matriz[z][y]];
             }
         }
-
-        debugMatriz(matriz, "After S-Box: \n");
-        
+  
         //ShiftRows
         uint8_t* tempRow = malloc(4 * sizeof(uint8_t));
         for(int y = 0; y < grid_size; y++){
@@ -125,14 +123,40 @@ int main(int argc, char* argv[]) {
         }
         free(tempRow);
         
-        debugMatriz(matriz, "After Shifting: \n");
-
         //Libera memória.
         free(buffer);
         freeMatriz(matriz);
         buffer = NULL;
         
     };
+}
+
+uint8_t xmul(uint8_t a, uint8_t b){
+    uint8_t result = 0;
+
+    while(b != 0){
+
+        if(b & 1){
+            result ^= a;
+        }
+        
+        //Reduz se necessário
+        if(a & 0x80)
+        {
+           a = (a << 1) ^ 0x1B; //Reduz pelo Rjindael x^4 + x^3 + x + 1
+        }
+        else
+        {
+            //Shift esquerdo = Ax * x
+            a <<= 1;
+        }
+
+        //Shift direito
+        b >>= 1;
+    }
+
+    return result;
+
 }
 
 void freeMatriz(uint8_t** mat){
