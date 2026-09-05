@@ -5,7 +5,12 @@
 int debugMatriz(uint8_t** mat, char* msg);
 void freeMatriz(uint8_t** mat);
 
+uint8_t** _createMatriz(uint8_t* buffer);
+void _encryptSbox(uint8_t** matriz, const uint8_t* sbox_encrypt);
+void _encryptShiftRows(uint8_t** matriz);
+
 uint8_t xmul(uint8_t A, uint8_t B);
+
 
 int main(int argc, char* argv[]) {
     
@@ -58,71 +63,33 @@ int main(int argc, char* argv[]) {
     /* f */  0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
     };
 
-    int shift_matrice[4][4] = {
-        {0, 1, 2, 3},
-        {1, 2, 3, 0},
-        {2, 3, 0, 1},
-        {3, 0, 1, 2}
-    };
-
     if(fptr != NULL){
 
-        //Reads file into a buffer
+        //Reads file size
         fseek(fptr, 0, SEEK_END);
         int sz = ftell(fptr);
-        
         rewind(fptr);
-        uint8_t* buffer = malloc(sz * sizeof(uint8_t));
 
+        //Cria buffer com dados a serem criptografados
+        uint8_t* buffer = malloc(sz * sizeof(uint8_t));
         fread(buffer, sizeof(uint8_t), sz, fptr);
 
-        //Separar em 2d arrays de 16bytes each
-        const int bytebsize = 16;
+        //Lóriica pra iterar em blocos de dados depois
+        // const int bytebsize = 16;
 
-        int blocksQty = sz / bytebsize;
-        int reminder = sz % bytebsize; //2 Sempre é garantido pelo \n + \0
+        // int blocksQty = sz / bytebsize;
+        // int reminder = sz % bytebsize; //2 Sempre é garantido pelo \n + \0
 
         //Cria matrizes
-        //Primeiro lidamos com todos os blocos inteiros
-        uint8_t** matriz = malloc(4 * sizeof(uint8_t*));
-
+        uint8_t** matriz = _createMatriz(buffer);
         const int grid_size = 4;
 
-        for(int i = 0; i < grid_size; i++){
-            matriz[i] = malloc(grid_size * sizeof(uint8_t));
-        }
-
-        //Cria matriz
-        for(int y = 0; y < grid_size; y++){
-            for(int z = 0; z < grid_size; z++){
-                matriz[z][y] = *buffer;
-                buffer++;
-            }
-        }
-
         //S-Box nos bytes da matriz
-        for(int y = 0; y < grid_size; y++){
-            for(int z = 0; z < grid_size; z++){
-                matriz[z][y] = sbox_encrypt[matriz[z][y]];
-            }
-        }
+        _encryptSbox(matriz, sbox_encrypt);
   
         //ShiftRows
-        uint8_t* tempRow = malloc(4 * sizeof(uint8_t));
-        for(int y = 0; y < grid_size; y++){
-
-            for(int x = 0; x < grid_size; x++){
-                tempRow[x] = matriz[y][x];
-            }
+        _encryptShiftRows(matriz);
                 
-
-            for(int z = 0; z < grid_size; z++){
-                //printf("Row: %d, Coll %d, Byte:%02X, ShiftMatrice: %d TempRow by Shift: %02X\n", y, z, tempRow[z], shift_matrice[y][z], tempRow[shift_matrice[y][z]]);
-                matriz[y][z] = tempRow[shift_matrice[y][z]];
-            }
-        }
-        free(tempRow);
-        
         //Libera memória.
         free(buffer);
         freeMatriz(matriz);
@@ -130,6 +97,67 @@ int main(int argc, char* argv[]) {
         
     };
 }
+
+uint8_t** _createMatriz(uint8_t* buffer){
+
+    uint8_t** m = malloc(4 * sizeof(uint8_t*));
+    const int grid_size = 4;
+
+    for(int i = 0; i < grid_size; i++){
+        m[i] = malloc(grid_size * sizeof(uint8_t));
+    }
+
+    //Cria matriz
+    for(int y = 0; y < grid_size; y++){
+        for(int z = 0; z < grid_size; z++){
+            m[z][y] = *buffer;
+            buffer++;
+        }
+    }
+
+    return m;
+}
+
+void _encryptSbox(uint8_t** matriz, const uint8_t* sbox_encrypt){
+
+    int grid_size = 4;
+
+    //S-Box nos bytes da matriz
+    for(int y = 0; y < grid_size; y++){
+
+        for(int z = 0; z < grid_size; z++){
+            matriz[z][y] = sbox_encrypt[matriz[z][y]];
+        }
+    }
+}
+
+void _encryptShiftRows(uint8_t** matriz){
+
+    int shift_matrice[4][4] = {
+    {0, 1, 2, 3},
+    {1, 2, 3, 0},
+    {2, 3, 0, 1},
+    {3, 0, 1, 2}
+    };
+
+    const int grid_size = 4;
+
+    //ShiftRows
+    uint8_t* tempRow = malloc(4 * sizeof(uint8_t));
+    for(int y = 0; y < grid_size; y++){
+
+        for(int x = 0; x < grid_size; x++){
+            tempRow[x] = matriz[y][x];
+        }
+                
+
+        for(int z = 0; z < grid_size; z++){
+            matriz[y][z] = tempRow[shift_matrice[y][z]];
+        }
+    }
+    free(tempRow);
+}
+
 
 uint8_t xmul(uint8_t a, uint8_t b){
     uint8_t result = 0;
@@ -183,9 +211,3 @@ int debugMatriz(uint8_t** mat, char* msg){
     return 0;
 }
 
-
-//AES (Symmetric)
-//Params* (-a, -mode, -key, -length(128, 192, 256))
-
-//RSA (assymetric)
-//SHA-256 (Hash function)
