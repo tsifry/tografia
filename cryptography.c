@@ -8,6 +8,7 @@ void freeMatriz(uint8_t** mat);
 uint8_t** _createMatriz(uint8_t* buffer);
 void _encryptSbox(uint8_t** matriz, const uint8_t* sbox_encrypt);
 void _encryptShiftRows(uint8_t** matriz);
+void _mixColl(uint8_t** matriz);
 
 uint8_t xmul(uint8_t A, uint8_t B);
 
@@ -74,7 +75,7 @@ int main(int argc, char* argv[]) {
         uint8_t* buffer = malloc(sz * sizeof(uint8_t));
         fread(buffer, sizeof(uint8_t), sz, fptr);
 
-        //Lóriica pra iterar em blocos de dados depois
+        //Lógica pra iterar em blocos de dados depois
         // const int bytebsize = 16;
 
         // int blocksQty = sz / bytebsize;
@@ -133,11 +134,11 @@ void _encryptSbox(uint8_t** matriz, const uint8_t* sbox_encrypt){
 
 void _encryptShiftRows(uint8_t** matriz){
 
-    int shift_matrice[4][4] = {
-    {0, 1, 2, 3},
-    {1, 2, 3, 0},
-    {2, 3, 0, 1},
-    {3, 0, 1, 2}
+    const int shift_matrice[4][4] = {
+        {0, 1, 2, 3},
+        {1, 2, 3, 0},
+        {2, 3, 0, 1},
+        {3, 0, 1, 2}
     };
 
     const int grid_size = 4;
@@ -156,6 +157,46 @@ void _encryptShiftRows(uint8_t** matriz){
         }
     }
     free(tempRow);
+}
+
+void _mixColl(uint8_t** matriz){
+
+    const int constMatriz[4][4] = {
+        {2, 3, 1, 1},
+        {1, 2, 3, 1},
+        {1, 1, 2, 3},
+        {3, 1, 1, 2}
+    };
+
+    const int grid_size = 4;
+
+    uint8_t* tempColl = malloc(4 * sizeof(uint8_t));
+
+    //Pra cada coluna da matriz
+    for(int col = 0; col < grid_size; col++){
+        uint8_t res = 0;
+
+        //Guarda a coluna em um array temporario
+        for(int x = 0; x < grid_size; x++){
+            tempColl[x] = matriz[x][col];
+        }
+
+        //Calcula multiplicação de matriz dado uma coluna k
+        for(int j = 0; j < grid_size; j++){
+
+            //Faz o dot product entre rx * k
+            for(int y = 0; y < grid_size; y++){
+
+                uint8_t mul = xmul(constMatriz[j][y], tempColl[y]);
+                res ^= mul;
+            }
+            
+            matriz[j][col] = res;
+            res = 0;
+        }
+    }
+
+    free(tempColl);
 }
 
 
@@ -198,9 +239,9 @@ void freeMatriz(uint8_t** mat){
 int debugMatriz(uint8_t** mat, char* msg){
 
     printf("%s", msg);
+
     for(int y = 0; y < 4; y++){
         for(int z = 0; z < 4; z++){
-            // printf("%02X  ", mat[y][z]);
             printf("%02X  ", *(*(mat + y) + z)); //insane syntax holy so hot fuck
         }
 
