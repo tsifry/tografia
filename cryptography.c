@@ -5,6 +5,7 @@
 int debugMatriz(uint8_t** mat, char* msg);
 void freeMatriz(uint8_t** mat);
 
+uint32_t* _keySchedule(uint8_t* chave, const uint8_t* sbox_encrypt);
 uint8_t** _createMatriz(uint8_t* buffer);
 void _encryptSbox(uint8_t** matriz, const uint8_t* sbox_encrypt);
 void _encryptShiftRows(uint8_t** matriz);
@@ -81,6 +82,10 @@ int main(int argc, char* argv[]) {
         // int blocksQty = sz / bytebsize;
         // int reminder = sz % bytebsize; //2 Sempre é garantido pelo \n + \0
 
+        //Key Scheduling
+        uint8_t* chave = malloc(16 * sizeof(uint8_t));
+        uint32_t* keys = _keySchedule(chave, sbox_encrypt);
+        
         //Cria matrizes
         uint8_t** matriz = _createMatriz(buffer);
         const int grid_size = 4;
@@ -90,6 +95,9 @@ int main(int argc, char* argv[]) {
   
         //ShiftRows
         _encryptShiftRows(matriz);
+        
+        //Mix Collumns
+        _mixColl(matriz);
                 
         //Libera memória.
         free(buffer);
@@ -97,6 +105,38 @@ int main(int argc, char* argv[]) {
         buffer = NULL;
         
     };
+}
+
+uint32_t* _keySchedule(uint8_t* chave, const uint8_t* sbox_encrypt){
+    
+    //Cada key nesse array é 4elementos de 4bytes = 16bytes.
+    uint32_t* keysArray = malloc(44 * sizeof(uint32_t));
+    uint32_t* chave4bytesBlock = (uint32_t *)chave;
+
+    for(int i = 0; i < 4; i++){
+        keysArray[i] = chave4bytesBlock[i];
+    }
+
+    for(int i = 0; i < 40; i++){
+
+        if(i % 4 == 0){
+            keysArray[i] = keysArray[i - 1] ^ keysArray[i - 4];
+        }
+        else
+        {
+            keysArray[i] = (keysArray[i] << 8) | (keysArray[i] >> 24);
+            uint8_t* bytesFromWord = (uint8_t*)keysArray[i];
+            
+            for(int y = 0; y < 4; y++){
+                bytesFromWord[i] = sbox_encrypt[bytesFromWord[i]];
+            }
+
+            bytesFromWord[0] ^= 0x01; //Rcon, isso aqui ta errado por enquanto.
+            keysArray[i] = (uint32_t*)bytesFromWord;
+        }
+    }
+
+
 }
 
 uint8_t** _createMatriz(uint8_t* buffer){
