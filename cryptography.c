@@ -109,33 +109,44 @@ int main(int argc, char* argv[]) {
 
 uint32_t* _keySchedule(uint8_t* chave, const uint8_t* sbox_encrypt){
     
+    //Array de setup pro Round constant Rcon
+    uint32_t rconArray[10] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x3 };
+    int rconCount = 0;
+
     //Cada key nesse array é 4elementos de 4bytes = 16bytes.
     uint32_t* keysArray = malloc(44 * sizeof(uint32_t));
     uint32_t* chave4bytesBlock = (uint32_t *)chave;
 
+    //K0 é a nossa chave original.
     for(int i = 0; i < 4; i++){
         keysArray[i] = chave4bytesBlock[i];
     }
 
-    for(int i = 0; i < 40; i++){
+    for(int i = 4; i <= 43; i++){
 
-        if(i % 4 == 0){
+        if(i % 4 != 0){
             keysArray[i] = keysArray[i - 1] ^ keysArray[i - 4];
         }
         else
-        {
-            keysArray[i] = (keysArray[i] << 8) | (keysArray[i] >> 24);
-            uint8_t* bytesFromWord = (uint8_t*)keysArray[i];
-            
-            for(int y = 0; y < 4; y++){
-                bytesFromWord[i] = sbox_encrypt[bytesFromWord[i]];
-            }
+        {   
+            uint32_t temp = keysArray[i - 1];
 
-            bytesFromWord[0] ^= 0x01; //Rcon, isso aqui ta errado por enquanto.
-            keysArray[i] = (uint32_t*)bytesFromWord;
+            //RotWorld -> Rotaciona pra esquerda uma vez
+            temp = (temp << 8) | (temp >> 24);
+            uint8_t* bytes = (uint8_t*)&temp;
+            
+            //Aplica sBox
+            for(int y = 0; y < 4; y++){
+                bytes[y] = sbox_encrypt[bytes[y]];
+            }
+            
+            //XOR com o Round constant
+            bytes[0] ^= rconArray[rconCount];
+            keysArray[i] = temp ^ keysArray[i - 4]; //XOR final
+
+            rconCount++;
         }
     }
-
 
 }
 
@@ -191,7 +202,6 @@ void _encryptShiftRows(uint8_t** matriz){
             tempRow[x] = matriz[y][x];
         }
                 
-
         for(int z = 0; z < grid_size; z++){
             matriz[y][z] = tempRow[shift_matrice[y][z]];
         }
