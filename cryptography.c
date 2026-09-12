@@ -1,12 +1,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 
 int debugMatriz(uint8_t** mat, char* msg);
 void freeMatriz(uint8_t** mat);
 
-uint32_t* _keySchedule(uint8_t* chave, const uint8_t* sbox_encrypt);
+uint32_t* _keySchedule(uint32_t* chave, const uint8_t* sbox_encrypt);
 uint8_t** _createMatriz(uint8_t* buffer);
+void _readChunk(uint8_t** m, uint8_t* buffer);
+
+//Algoritmo funcs
+void _AddRoundKey(uint8_t** m, uint32_t* keys, int currentKeyStart);
 void _encryptSbox(uint8_t** matriz, const uint8_t* sbox_encrypt);
 void _encryptShiftRows(uint8_t** matriz);
 void _mixColl(uint8_t** matriz);
@@ -15,14 +20,21 @@ uint8_t xmul(uint8_t A, uint8_t B);
 
 
 int main(int argc, char* argv[]) {
-    
-    for(int i = 0; i < argc; i++){
-        printf("%s\n", argv[i]);
+
+    //Input check inicial
+    if(argc != 3){
+        printf("Para encriptografar um arquivo, por favor utilize:\n");
+        printf("./tografia.exe <arquivo-path> <chave>\n \n");
+        printf("A sua chave deve conter 16 caracteres.\n");
+        return 1;
     }
-
+    else if(strlen(argv[2]) != 16){
+        printf("Utilize uma chave que contenha 16 caracteres.");
+    }
+    
     FILE *fptr;
-    fptr = fopen("texto.txt", "rb");
-
+    fptr = fopen(argv[1], "rb");
+    
     // Spec page 16
     const uint8_t sbox_encrypt[] = {
     /*          0     1     2     3     4     5     6     7     8     9     a     b     c     d     e     f */
@@ -65,6 +77,7 @@ int main(int argc, char* argv[]) {
     /* f */  0x17, 0x2b, 0x04, 0x7e, 0xba, 0x77, 0xd6, 0x26, 0xe1, 0x69, 0x14, 0x63, 0x55, 0x21, 0x0c, 0x7d,
     };
 
+
     if(fptr != NULL){
 
         //Reads file size
@@ -76,50 +89,81 @@ int main(int argc, char* argv[]) {
         uint8_t* buffer = malloc(sz * sizeof(uint8_t));
         fread(buffer, sizeof(uint8_t), sz, fptr);
 
-        //Lógica pra iterar em blocos de dados depois
-        // const int bytebsize = 16;
-
-        // int blocksQty = sz / bytebsize;
-        // int reminder = sz % bytebsize; //2 Sempre é garantido pelo \n + \0
-
         //Key Scheduling
-        uint8_t* chave = malloc(16 * sizeof(uint8_t));
-        uint32_t* keys = _keySchedule(chave, sbox_encrypt);
-        
-        //Cria matrizes
-        uint8_t** matriz = _createMatriz(buffer);
-        const int grid_size = 4;
+        uint32_t chave[4];
+        memcpy(chave, argv[1], sizeof(chave));
 
-        //S-Box nos bytes da matriz
-        _encryptSbox(matriz, sbox_encrypt);
-  
-        //ShiftRows
-        _encryptShiftRows(matriz);
-        
-        //Mix Collumns
-        _mixColl(matriz);
+        for(int i = 0; i < 4; i++){
+            chave[i] = __builtin_bswap32(chave[i]);
+        }
+
+        uint32_t* keys = _keySchedule(chave, sbox_encrypt);
+
+        //Lógica pra iterar em blocos de dados e aplicar o algorítmo completo
+        const int bytes = 16;
+
+        int blocksQty = sz / bytes;
+        int reminder = sz % bytes;
+
+
+        //Cria matriz
+        uint8_t** chunkMatrice = _createMatriz(buffer);
+
+        //Main loop
+        for(int chunk = 0; chunk < blocksQty; chunk++){
+            
+            //Le chunk atual pra memória da matriz
+            _readChunk(chunkMatrice, buffer);
+
+            for(int round = 0; round <= 10; round++){
+
+                if(round == 0){
+                    _AddRoundKey(chunkMatrice, keys, 0);
+                    continue;
+                }
+
+                //S-Box nos bytes da matriz
+                _encryptSbox(chunkMatrice, sbox_encrypt);
+          
+                //ShiftRows
+                _encryptShiftRows(chunkMatrice); 
                 
+                if(round != 10){
+                    //Mix Collumns
+                    _mixColl(chunkMatrice);
+                }
+
+                //Add Round Key
+                _AddRoundKey(chunkMatrice, keys, round * 4);
+            }
+
+        }
+
         //Libera memória.
+        freeMatriz(chunkMatrice);
         free(buffer);
-        freeMatriz(matriz);
         buffer = NULL;
         
-    };
+    }
+    else
+    {
+        printf("Arquivo invalido.");
+        return 1;
+    }
 }
 
-uint32_t* _keySchedule(uint8_t* chave, const uint8_t* sbox_encrypt){
+uint32_t* _keySchedule(uint32_t* chave, const uint8_t* sbox_encrypt){
     
     //Array de setup pro Round constant Rcon
-    uint32_t rconArray[10] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x3 };
+    uint8_t rconArray[10] = {0x01, 0x02, 0x04, 0x08, 0x10, 0x20, 0x40, 0x80, 0x1b, 0x36};
     int rconCount = 0;
 
     //Cada key nesse array é 4elementos de 4bytes = 16bytes.
     uint32_t* keysArray = malloc(44 * sizeof(uint32_t));
-    uint32_t* chave4bytesBlock = (uint32_t *)chave;
 
     //K0 é a nossa chave original.
     for(int i = 0; i < 4; i++){
-        keysArray[i] = chave4bytesBlock[i];
+        keysArray[i] = chave[i];
     }
 
     for(int i = 4; i <= 43; i++){
@@ -141,33 +185,53 @@ uint32_t* _keySchedule(uint8_t* chave, const uint8_t* sbox_encrypt){
             }
             
             //XOR com o Round constant
-            bytes[0] ^= rconArray[rconCount];
+            //Aqui é bytes[3] pois o cast de char pra 32bits teve um swap(__builtin_bswap32) pra big-endian,
+            //Mas o array é escrito em little-endian, então aplicamos no "último" byte.
+            bytes[3] ^= rconArray[rconCount];
             keysArray[i] = temp ^ keysArray[i - 4]; //XOR final
 
             rconCount++;
         }
     }
 
+    return keysArray;
 }
 
 uint8_t** _createMatriz(uint8_t* buffer){
 
     uint8_t** m = malloc(4 * sizeof(uint8_t*));
-    const int grid_size = 4;
 
-    for(int i = 0; i < grid_size; i++){
-        m[i] = malloc(grid_size * sizeof(uint8_t));
+    for(int i = 0; i < 4; i++){
+        m[i] = malloc(4 * sizeof(uint8_t));
     }
 
-    //Cria matriz
+    return m;
+}
+
+void _readChunk(uint8_t** m, uint8_t* buffer){
+
+    const int grid_size = 4;
+
     for(int y = 0; y < grid_size; y++){
         for(int z = 0; z < grid_size; z++){
             m[z][y] = *buffer;
             buffer++;
         }
     }
+}
 
-    return m;
+void _AddRoundKey(uint8_t** m, uint32_t* keys, int currentKeyStart){
+
+    uint8_t* temp = (uint8_t*)&keys;
+    int ck = currentKeyStart;
+
+    for(int i = 0; i < 4; i++){
+        for(int y = 0; y < 4; y++){
+            m[i][y] ^= temp[ck];
+            ck++;
+        }
+    }
+
 }
 
 void _encryptSbox(uint8_t** matriz, const uint8_t* sbox_encrypt){
